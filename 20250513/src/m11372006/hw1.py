@@ -99,17 +99,6 @@ class taipei_route_list:
 
         self.session.commit()
 
-    def read_from_database(self) -> pd.DataFrame:
-        """
-        Reads bus route data from the SQLite database.
-
-        Returns:
-            pd.DataFrame: DataFrame containing bus route data.
-        """
-        query = self.session.query(self.orm)
-        self.db_dataframe = pd.read_sql(query.statement, self.session.bind)
-        return self.db_dataframe
-
     def set_route_data_updated(self, route_id: str, route_data_updated: int = 1):
         """
         Sets the route_data_updated flag in the database.
@@ -121,9 +110,8 @@ class taipei_route_list:
         self.session.query(self.orm).filter_by(route_id=route_id).update({"route_data_updated": route_data_updated})
         self.session.commit()
 
-
     def set_route_data_unexcepted(self, route_id: str):
-        self.session.query(self.orm).filter_by(route_id=route_id).update({"route_data_updated": 2 })
+        self.session.query(self.orm).filter_by(route_id=route_id).update({"route_data_updated": 2})
         self.session.commit()
 
     def __del__(self):
@@ -173,12 +161,6 @@ class taipei_route_info:
             page.wait_for_timeout(3000)  # Wait for page render
             self.content = page.content()
             browser.close()
-
-        # Save the rendered HTML to a file for inspection
-        self.html_file = f"{self.working_directory}/ebus_taipei_{self.route_id}.html"
-        
-        # with open(html_file, "w", encoding="utf-8") as file:
-        #     file.write(self.content)
 
     def parse_route_info(self) -> pd.DataFrame:
         """
@@ -254,17 +236,33 @@ class taipei_route_info:
         session.close()
 
 
+def get_bus_info_go(bus_id):
+    """
+    根據 bus_id 回傳該路線的所有車站 id (去程)
+    """
+    try:
+        # 初始化 taipei_route_info 類別
+        route_info = taipei_route_info(bus_id, direction="go")
+        # 解析車站資訊
+        route_info.parse_route_info()
+        # 從資料框中提取車站 ID
+        stop_ids = route_info.dataframe["stop_id"].tolist()
+        return stop_ids
+    except Exception as e:
+        print(f"Error retrieving bus info for {bus_id}: {e}")
+        return []
+
+
 if __name__ == "__main__":
     # Initialize and process route data
     route_list = taipei_route_list()
     route_list.parse_route_list()
     route_list.save_to_database()
 
-    bus1='0161000900' # 承德幹線
-    bus2='0161001500' #基隆幹線
+    bus1 = '0161000900'  # 承德幹線
+    bus2 = '0161001500'  # 基隆幹線
 
-    bus_list = [bus1]
-
+    bus_list = [bus1, bus2]
 
     for route_id in bus_list:
         try:
@@ -272,14 +270,9 @@ if __name__ == "__main__":
             route_info.parse_route_info()
             route_info.save_to_database()
 
-
             for index, row in route_info.dataframe.iterrows():
                 print(f"Stop Number: {row['stop_number']}, Stop Name: {row['stop_name']}, "
                       f"Latitude: {row['latitude']}, Longitude: {row['longitude']}")
-
-            # route_info = taipei_route_info(route_id, direction="come")
-            # route_info.parse_route_info()
-            # route_info.save_to_database()
 
             route_list.set_route_data_updated(route_id)
             print(f"Route data for {route_id} updated.")
@@ -288,4 +281,9 @@ if __name__ == "__main__":
             print(f"Error processing route {route_id}: {e}")
             route_list.set_route_data_unexcepted(route_id)
             continue
+
+    # Example usage of get_bus_info_go
+    bus_id = "0161000900"
+    stop_ids = get_bus_info_go(bus_id)
+    print(f"Stops for bus {bus_id}: {stop_ids}")
 
